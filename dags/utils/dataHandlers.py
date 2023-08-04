@@ -124,8 +124,8 @@ class Articles:
             df_temp.insert(1, "SourceId", df_temp["source.name"].apply(
                 lambda x: x.lower().replace(" ", "-"))
             )
-            df_final = df_temp.rename(columns={"source.name": "sourceName"})
-            df_final.drop(columns="source.id")
+            df_rename = df_temp.rename(columns={"source.name": "sourceName"})
+            df_final = df_rename.drop(columns="source.id")
             df_final.to_csv(FILE_CSV, index=False)
 
             print("Informacion normalizada: {}".format(FILE_CSV))
