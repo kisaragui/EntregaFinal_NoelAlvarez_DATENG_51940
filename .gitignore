@@ -3,3 +3,4 @@ __pycache__/
 .env
 pruebas.ipynb
 logs
+data/
