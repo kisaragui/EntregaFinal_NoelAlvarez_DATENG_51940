@@ -3,6 +3,7 @@ from utils.dbHandlers import RedshiftHandlers
 from utils.dataHandlers import Articles
 from utils.pathManager import PathDir
 from datetime import datetime, timedelta
+from airflow.models import Variable
 from airflow.decorators import dag, task
 from airflow.operators.empty import EmptyOperator
 
@@ -14,12 +15,12 @@ file_name = "Articles"
 date = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
 FILE_PATH = "{}/{}_{}".format(data_path, file_name, date)
-URL = os.environ["TOP_HEADLINES_URL"]
+URL = Variable.get("TOP_HEADLINES_URL")
 API_PARAMS = {
     "country": ["ar", "us"],
     "category": ["technology"],
     "pageSize": 100,
-    "apikey": os.environ["KEY"],
+    "apikey": Variable.get("APIKEY")
 }
 
 
