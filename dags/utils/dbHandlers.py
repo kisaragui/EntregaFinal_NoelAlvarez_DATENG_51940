@@ -83,7 +83,6 @@ class RedshiftHandlers:
         DF = pd.read_csv(file_name)
         DF_COLUMNS_LIST = DF.columns.tolist()
 
-
         INSERT_QUERY = "insert into {}.{} ( {} ) values  %s  ".format(
             SCHEMA, TABLE_NAME, ", ".join(DF_COLUMNS_LIST)
         )
@@ -91,24 +90,26 @@ class RedshiftHandlers:
         print("Cantidad de Articulos a guardar: {} ".format(len(DF)))
 
         if CONNECTION.dialect.has_table(CONNECTION, TABLE_NAME):
-            with CONNECTION.begin() as trans:
-                with CONNECTION.connection.cursor() as cursor:
-                    print("Consultando la existencia de articulos en Redshift...")
-                    DF["publishedAt"] = pd.to_datetime(DF["publishedAt"])
-                    DF.replace(np.nan, None)
+            cursor = CONNECTION.connection.cursor()
 
-                    for i, row in DF.iterrows():
-                        result = self.run_script_sql(
-                            "is-Exist-Record", "isExistRow.sql", data=row.to_dict()
-                        )
-                        if result:
-                            count_rows += 1
-                            execute_values(cursor, INSERT_QUERY, [tuple(row)])
-                        else:
-                            exist_rows += 1
+            print("Consultando la existencia de articulos en Redshift...")
+            DF["publishedAt"] = pd.to_datetime(DF["publishedAt"])
+            DF.replace(np.nan, None)
+
+            for i, row in DF.iterrows():
+                result = self.run_script_sql(
+                    "is-Exist-Record", "isExistRow.sql", data=row.to_dict()
+                )
+                if result:
+                    count_rows += 1
+                    execute_values(cursor, INSERT_QUERY, [tuple(row)])
+                else:
+                    exist_rows += 1
 
             print("Cantidad de Articulos existentes: {} ".format(exist_rows))
             print("Cantidad de Articulos insertados: {} ".format(count_rows))
+            CONNECTION.connection.commit()
+            cursor.close()
 
         else:
             print("La tabla {} aun no se ha creado".format(TABLE_NAME))

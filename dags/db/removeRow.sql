@@ -1,0 +1,1 @@
+DELETE FROM njesusas_coderhouse.articles WHERE publishedAt = %(reprocess_date)s;

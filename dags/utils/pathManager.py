@@ -2,7 +2,7 @@ import os
 
 
 class PathBase:
-    
+
     """
     Clase abstracta para manejar el directorio de la carpeta del proyecto.
 
@@ -44,12 +44,13 @@ class PathBase:
 
 
 class PathDir(PathBase):
-    
+
     """
-    
-        Clase principal para manejar el directorio con airflow
-        
-    """    
+
+    Clase principal para manejar el directorio con airflow
+
+    """
+
     def _get_current_directory(self):
         airflow_directory = os.environ.get("AIRFLOW_HOME")
         project_folder = os.environ["PROJECT"]

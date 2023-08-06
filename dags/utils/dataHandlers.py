@@ -1,7 +1,10 @@
 import requests as r
 import pandas as pd
-import itertools
+import numpy as np
 import json
+import csv
+import os
+from utils.pathManager import PathDir
 
 
 class Articles:
@@ -27,7 +30,7 @@ class Articles:
 
         Returns
         -------
-            FILE_JSON: 
+            FILE_JSON:
                Ubicacion del archivo en formato json con los articulos encontrados.
 
             NOTA: Es necesario pasar por el parametro "args" la clave de autenticacion
@@ -36,43 +39,46 @@ class Articles:
         """
 
         if "apikey" not in args:
-            print("No se subministro la Key de la Api")
-            return None
+            raise ValueError("No se subministro la Key de la Api")
 
+        BACKFILL = os.environ["BACKFILL"]
         FILE_JSON = "{}.json".format(file_path)
         all_news = []
+        filtered_articles = []
         count_articles = 0
 
         # Se llama a la api por cada valor de la categoria y el pais
-        for country_item, category_item in itertools.product(
-            args["country"], args["category"]
-        ):
-            params = {
-                "country": country_item,
-                "category": category_item,
-                "pageSize": args["pageSize"],
-                "apikey": args["apikey"],
-            }
+        try:
+            for language_item in args["language"]:
+                params = args.copy()
+                params["language"] = language_item
 
-            try:
+                if BACKFILL == "True":
+                    params["from_param"] = os.environ["REPROCESS_DATE"]
+
+                print("paramentros de la api: ", params)
                 response = r.get(url, params=params)
                 result = response.json()
 
-                if response.status_code == 200 and result["status"] == "ok":
-                    template_json = {
-                        "country": country_item,
-                        "category": category_item,
-                        "articles": result["articles"],
-                    }
-                    
-                    all_news.append(template_json)
-                    count_articles += len(result["articles"])
+                if result["status"] == "ok" and result["totalResults"] > 0:
+                    filtered_articles = [
+                        article
+                        for article in result["articles"]
+                        if params["from_param"] in article["publishedAt"]
+                    ]
+                    if filtered_articles:
+                        template_json = {
+                            "language": language_item,
+                            "articles": filtered_articles,
+                        }
+                        all_news.append(template_json)
+                        count_articles += len(filtered_articles)
 
                 elif result["status"] == "ok" and result["totalResults"] == 0:
                     raise ValueError("No se encontraron Articulos")
 
-            except:
-                raise Exception(result["message"])
+        except Exception as err:
+            raise Exception(err)
 
         if all_news:
             print("Cantidad de Articulos obtenidos: {}".format(count_articles))
@@ -86,47 +92,52 @@ class Articles:
         return FILE_JSON
 
     def normalize_data(self, data_path: str):
-        """
-            Funcion que aplica el tratamiento corresponde en la informacion y
-            la devuelde en formato de dataframe
-
-        Parameters
-        ----------
-            data_path (str), Obligatorio.
-                Directorio del archivo en formato json con los articulos encontrados por la api.
-
-        Returns
-        -------
-            FILE_CSV:  
-                Ubicacion del archivo en formato csv con informacion normalizada.
-        """
-
         if not data_path:
-            print("No se paso la ubicacion del archivo de los articulos...")
-            return None
+            raise ValueError("No se paso la ubicacion del archivo de los articulos...")
 
+        path = PathDir()
+        data_directory = path.get_path_to("data")
+        source_json = "{}/sources.json".format(data_directory)
         try:
             FILE_CSV = data_path.replace("json", "csv")
+
             print("Aplicando transformaciones y ajustes...")
 
-            with open(data_path, "r") as file:
-                raw_data = json.loads(file.read())
+            with open(data_path, "r") as file_json, open(
+                source_json, "r"
+            ) as file_source:
+                raw_data = json.load(file_json)
+                raw_source = json.load(file_source)
 
             df_temp = pd.json_normalize(
-                raw_data["result"], record_path="articles", meta=["country", "category"]
+                raw_data["result"], record_path="articles", meta="language"
+            )
+            df_sources = pd.DataFrame.from_dict(raw_source["sources"])
+
+            df_merged = df_temp.merge(
+                df_sources[["name", "category", "country"]],
+                left_on="source.name",
+                right_on="name",
+                how="left",
             )
 
-            df_temp["publishedAt"] = df_temp["publishedAt"].apply(
+            df_merged["publishedAt"] = df_merged["publishedAt"].apply(
                 lambda x: x.rsplit("T", 1)[0]
             )
-            df_temp["author"].fillna("anonymous", inplace=True)
-            df_temp.insert(0, "id", df_temp.reset_index().index + 1)
-            df_temp.insert(1, "SourceId", df_temp["source.name"].apply(
-                lambda x: x.lower().replace(" ", "-"))
+            df_merged["author"].fillna("anonymous", inplace=True)
+            df_merged["category"].fillna("general", inplace=True)
+            df_merged.insert(0, "id", df_temp.reset_index().index + 1)
+            df_merged.insert(
+                1,
+                "SourceId",
+                df_temp["source.name"].apply(lambda x: x.lower().replace(" ", "-")),
             )
-            df_rename = df_temp.rename(columns={"source.name": "sourceName"})
-            df_final = df_rename.drop(columns="source.id")
-            df_final.to_csv(FILE_CSV, index=False)
+            df_renamed = df_merged.rename(columns={"source.name": "sourceName"})
+            df_final = df_renamed.drop(columns=["source.id", "name"])
+            df_final.replace(np.nan, None)
+            df_final.to_csv(
+                FILE_CSV, index=False, quoting=csv.QUOTE_ALL, doublequote=True
+            )
 
             print("Informacion normalizada: {}".format(FILE_CSV))
 
