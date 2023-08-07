@@ -5,7 +5,21 @@ A continuacion esta el enlace de la pagina:
 
 https://newsapi.org/
 
-Se decidio usar el endpoint "Top headlines".
+Se decidio Cambiar el endpoint "everything".
+
+ ## Mecanismo Backfill:
+
+  Para efectuar este mecanismo, se proporciona las variables de entorno BACKFILL y REPROCESS_DATE, ubicadas en el archivo .env (mas adelante se indica como recrearlo).
+
+  A continuacion se indican algunos criterios para usarlas:
+  
+  * BACKFILL : Setearlo con los valores "True" o "False" (incluir las comillas), por defecto deber estar en "False".
+  * REPROCESS_DATE Debe ser una fecha anterior a la actual, maximo 3 semanas de diferencia y en formato de FECHA SIN HORAS.
+
+  La api en la version gratuita, solo proporciona la historia de los articulos de 3 semanas pasadas.
+
+
+## Pasos a seguir: 
 
 Una vez clonado el repositorio, se debe tener en cuenta lo siguiente:
 
@@ -40,11 +54,15 @@ docker-compose up --build
     * Password: `contraseña de redshift`
     * Port: `5439`
   
- En la pestaña `Admin -> Variables` crear las siguientes variables de entorno para el funcionamient de la API:
+ En la pestaña `Admin -> Variables` crear las siguientes variables de entorno para el funcionamient de la API y para envio de correo automatico:
 
     * APIKEY: `key de la api news-Api.org`
-    * TOP_HEADLINES_URL: `https://newsapi.org/v2/top-headlines`
-
+    * TOP_HEADLINES_URL: `https://newsapi.org/v2/everything`
+    * SMTP_EMAIL_FROM : `Correo del remitente`
+    * SMTP_EMAIL_TO : `Correo del Destinatario`
+    * SMTP_HOST: `Host smtp`
+    * SMTP_PASSWORD: `Contraseña del smtp`
+    * SMTP_PORT: `Puerto del smtp`
 
 
 

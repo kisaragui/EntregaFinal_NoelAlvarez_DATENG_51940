@@ -2,18 +2,19 @@ import os
 from utils.dbHandlers import RedshiftHandlers
 from utils.dataHandlers import Articles
 from utils.pathManager import PathDir
+from utils.EmailHandlers import SMTPManager
 from datetime import datetime, timedelta
 from airflow.models import Variable
 from airflow.decorators import dag, task
 from airflow.operators.empty import EmptyOperator
 
-
+SMTP = SMTPManager()
 REDSHIFT = RedshiftHandlers()
 ARTICULOS = Articles()
 path = PathDir()
 data_directory = path.get_path_to("data")
 file_name = "Articles"
-CURRENT_DATE = "2023-08-05"  # datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
+CURRENT_DATE = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 
 # Configuraciones para la api
 TEXT_SEARCH = "chatgpt"
@@ -25,8 +26,7 @@ BACKFILL = os.environ.get("BACKFILL")
 REPROCESS_DATE = os.environ.get("REPROCESS_DATE")
 
 # Variables de la api
-date = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-FILE_PATH = "{}/{}_{}".format(data_directory, file_name, date)
+FILE_PATH = "{}/{}_{}".format(data_directory, file_name, CURRENT_DATE)
 URL = Variable.get("TOP_HEADLINES_URL")
 API_PARAMS = {
     "q": TEXT_SEARCH,
@@ -39,12 +39,13 @@ API_PARAMS = {
 
 
 @dag(
-    "Entregafinal",  # os.environ["PROJECT"],
+    os.environ["PROJECT"],
     default_args={
         "owner": "airflow",
         "depends_on_past": False,
         "retry_delay": timedelta(minutes=5),
         "start_date": CURRENT_DATE,
+        "on_failure_callback": SMTP.on_failure_function,
     },
     catchup=False,
     schedule_interval="0 0 * * *",
@@ -89,10 +90,12 @@ def main():
     def normalize_data_task(file_path):
         return ARTICULOS.normalize_data(file_path)
 
+    # Guardando la informacion en redshift
     @task()
     def insert_data_task(file_path):
         return REDSHIFT.write_df(file_path)
 
+    # Eliminando los archivos procesados
     @task()
     def remove_data_task(data_path, file_path):
         print("Identificando los archivos procesados...")
@@ -102,7 +105,11 @@ def main():
                 os.remove("{}/{}".format(data_path, file))
 
     # Ultimo task
-    finish = EmptyOperator(task_id="Finish", trigger_rule="all_done")
+    finish = EmptyOperator(
+        task_id="Finish",
+        trigger_rule="none_failed",
+        on_success_callback=SMTP.on_success_function,
+    )
 
     create_table = create_table_task("articles.sql")
     branch = branch_task(BACKFILL)
