@@ -7,6 +7,22 @@ https://newsapi.org/
 
 Se decidio Cambiar el endpoint "everything".
 
+Dicha api obtiene articulos de diferentes sitios web y blogs segun los parametros subministrados.
+
+## Configuraciones
+
+Las siguientes variables fueron diseñadas para configurar y activar diferentes funcionalidades de codigo del proyecto.
+
+En caso de la API:
+* TEXT_SEARCH: `Palabra o frase que relacionada al articulo.`
+* LANGUAGES: `Lista o cadena de texto de los idiomas de los articulos a filtrar, ejemplo: es, en, pr, etc.`
+
+En caso del threshold
+* THRESHOLD: `Activa o desactiva la notificacion del umbral. el formato es un booleano: True o False.`
+* THRESHOLD_DATE: `Fecha de los articulos publicados a obtener, puede ser en formato YYY-MM-DD.`
+* MAX_THRESHOLD : `Valor  maximo del umbral de tipo numerico.`
+* MIN_THRESHOLD : `Valor  minimo del umbral de tipo numerico.`
+
  ## Mecanismo Backfill:
 
   Para efectuar este mecanismo, se proporciona las variables de entorno BACKFILL y REPROCESS_DATE, ubicadas en el archivo .env (mas adelante se indica como recrearlo).
@@ -64,5 +80,6 @@ docker-compose up --build
     * SMTP_PASSWORD: `Contraseña del smtp`
     * SMTP_PORT: `Puerto del smtp`
 
+Los comprobantes de las notificaciones se encuentran en la carpeta "images".
 
 
