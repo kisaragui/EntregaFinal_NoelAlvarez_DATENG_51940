@@ -1,6 +1,11 @@
-from airflow.models import Variable
 import os
 import smtplib
+from email.mime.text import MIMEText
+import spacy
+import pandas as pd
+from collections import Counter
+from utils.dbHandlers import RedshiftHandlers
+from airflow.models import Variable
 
 
 class SMTPManager:
@@ -98,3 +103,96 @@ class SMTPManager:
         except Exception as err:
             print("Fallo al enviar el Email")
             raise Exception(err)
+
+    def send_notification_threshold(
+        self, word_freq: dict, max_threshold: int, min_threshold: int
+    ):
+        """
+            Funcion que envia la notificacion del umbral.
+
+         Parameters
+        ----------
+            word_freq: (dict)
+                Diccionario con la informacion por idioma de los titulos de los articulos.
+            max_threshold: (int)
+                Valor maximo del umbral
+            min_threshold: (int)
+                Valor minino del umbral
+        """
+        content = "Estas son las palabras mas frecuentes entre los titulos de los articulos:\n"
+        en_words_above_threshold = [
+            "Palabra: {}, Frecuencia: {}\n".format(word, freq)
+            for word, freq in word_freq["en"]
+            if min_threshold <= freq <= max_threshold
+        ]
+        if en_words_above_threshold:
+            content += "En el idioma Ingles: \n"
+            content += "".join(en_words_above_threshold)
+        else:
+            content += "En el idioma Ingles: \n"
+            content += "Las frecuencias no superan esta categoria\n"
+
+        es_words_above_threshold = [
+            "Palabra: {}, Frecuencia: {}\n".format(word, freq)
+            for word, freq in word_freq["es"]
+            if min_threshold <= freq <= max_threshold
+        ]
+        if es_words_above_threshold:
+            content += "En el idioma Espaniol: \n"
+            content += "".join(es_words_above_threshold)
+        else:
+            content += "En el idioma Espaniol: \n"
+            content += "Las frecuencias no superan esta categoria\n"
+
+        if en_words_above_threshold or es_words_above_threshold:
+            subject = "Notificacion de Umbral"
+            self.send_email(content, subject)
+
+    def check_threshold(
+        self, date_published: str, max_threshold: int, min_threshold: int
+    ):
+        """
+            Funcion encarga de obtener la informacion para chequear el umbral.
+
+        Parameters
+        ----------
+            date_published: (str)
+                Fecha del dia de la puplicacion, corrientemente seria la fecha
+                subministrada por la api
+            max_threshold: (int)
+                Valor maximo del umbral
+            min_threshold: (int)
+                Valor minino del umbral
+        """
+        REDSHIFT = RedshiftHandlers()
+        df_columns = ["publishedAt", "title", "language"]
+
+        query = REDSHIFT.run_script_sql(
+            "get_data", "checkThreshold.sql", data={"date_published": date_published}
+        )
+        df = pd.DataFrame(query, columns=df_columns)
+
+        nlp_en = spacy.load("en_core_web_sm")
+        nlp_es = spacy.load("es_core_news_sm")
+        en_words = []
+        es_words = []
+
+        for i, row in df.iterrows():
+            if row["language"] == "en":
+                doc = nlp_en(row["title"].lower())
+                words = [
+                    token.text for token in doc if token.is_alpha and not token.is_stop
+                ]
+                en_words.extend(words)
+            else:
+                doc = nlp_es(row["title"].lower())
+                words = [
+                    token.text for token in doc if token.is_alpha and not token.is_stop
+                ]
+                es_words.extend(words)
+
+        en_word_freq = Counter(en_words).most_common()
+        es_word_freq = Counter(es_words).most_common()
+
+        word_freq = {"en": en_word_freq, "es": es_word_freq}
+        self.send_notification_threshold(word_freq, max_threshold, min_threshold)

@@ -20,6 +20,11 @@ CURRENT_DATE = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
 TEXT_SEARCH = "chatgpt"
 LANGUAGES = ["es", "en"]
 
+# Configuraciones para Del threshold
+THRESHOLD = True
+THRESHOLD_DATE = "2023-08-04"
+MAX_THRESHOLD = 50
+MIN_THRESHOLD = 10
 
 # Variables del backfill
 BACKFILL = os.environ.get("BACKFILL")
@@ -95,6 +100,14 @@ def main():
     def insert_data_task(file_path):
         return REDSHIFT.write_df(file_path)
 
+    # Chequea el umbral y envia un email
+    @task()
+    def check_threshold_task():
+        if THRESHOLD:
+            return SMTP.check_threshold(THRESHOLD_DATE, MAX_THRESHOLD, MIN_THRESHOLD)
+        else:
+            return None
+
     # Eliminando los archivos procesados
     @task()
     def remove_data_task(data_path, file_path):
@@ -117,12 +130,20 @@ def main():
     call_api = call_api_task(FILE_PATH, URL, API_PARAMS)
     normalize_data = normalize_data_task(call_api)
     insert_data = insert_data_task(normalize_data)
+    check_threshold = check_threshold_task()
     remove_data = remove_data_task(data_directory, insert_data)
 
     # Ordenar de ejecucion de los dags
     start >> create_table >> branch >> [backfill, call_api]
-
-    backfill >> call_api >> normalize_data >> insert_data >> remove_data >> finish
+    (
+        backfill
+        >> call_api
+        >> normalize_data
+        >> insert_data
+        >> check_threshold
+        >> remove_data
+        >> finish
+    )
 
 
 main()
